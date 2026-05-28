@@ -1,10 +1,10 @@
 package com.example.praktam_2407051025
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +35,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,14 +43,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.praktam_2407051025.model.Beasiswa
 import com.example.praktam_2407051025.model.BeasiswaSource
+import com.example.praktam_2407051025.network.RetrofitClient
 import com.example.praktam_2407051025.ui.theme.PrakTAM_2407051025Theme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -68,56 +75,83 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun DaftarBeasiswaScreen() {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item {
-            Text(
-                text = "Rekomendasi Populer",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(BeasiswaSource.dummyBeasiswa) { beasiswa ->
-                    BeasiswaRowItem(beasiswa = beasiswa)
-                }
-            }
-            Spacer(modifier = Modifier.height(45.dp))
-            Text(
-                text = "Daftar Beasiswa Lengkap",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
+    var beasiswaList by remember { mutableStateOf<List<Beasiswa>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var statusLabel by remember { mutableStateOf("") }
 
-        items(BeasiswaSource.dummyBeasiswa) { beasiswa ->
-            DetailBeasiswaScreen(beasiswa = beasiswa)
+    LaunchedEffect(Unit) {
+        try {
+            val response = RetrofitClient.instance.getBeasiswa()
+            Log.d("API_Data", "Internet Sukses: ${response.size} item. Data: $response")
+            beasiswaList = response
+            statusLabel = "[INTERNET]"
+            isLoading = false
+        } catch (e: Exception) {
+            Log.e("API_Data", "Gagal API (Gunakan Lokal): ${e.message}")
+            beasiswaList = BeasiswaSource.dummyBeasiswa
+            statusLabel = "[LOKAL]"
+            isLoading = false
+        }
+    }
+
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item {
+                Text(
+                    text = "$statusLabel Rekomendasi Populer",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(beasiswaList) { item ->
+                        BeasiswaRowItem(beasiswa = item)
+                    }
+                }
+                Spacer(modifier = Modifier.height(45.dp))
+                Text(
+                    text = "$statusLabel Daftar Beasiswa Lengkap",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            items(beasiswaList) { item ->
+                DetailBeasiswaScreen(beasiswa = item)
+            }
         }
     }
 }
 
 @Composable
 fun BeasiswaRowItem(beasiswa: Beasiswa) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.width(160.dp),
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column {
-            Image(
-                painter = painterResource(id = beasiswa.imageRes),
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(beasiswa.imageUrl)
+                    .setHeader("User-Agent", "Mozilla/5.0")
+                    .crossfade(true)
+                    .build(),
                 contentDescription = beasiswa.nama,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
+                placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
+                error = painterResource(id = android.R.drawable.ic_dialog_alert),
+                onError = { Log.e("Coil_Error", "Daftar: Gagal muat [${beasiswa.nama}]: ${it.result.throwable.message} URL: ${beasiswa.imageUrl}") },
+                modifier = Modifier.fillMaxWidth().height(100.dp),
                 contentScale = ContentScale.Crop
             )
             Column(modifier = Modifier.padding(8.dp)) {
@@ -140,53 +174,48 @@ fun BeasiswaRowItem(beasiswa: Beasiswa) {
 @Composable
 fun DetailBeasiswaScreen(beasiswa: Beasiswa) {
     var isFavorite by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isRegistering by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxWidth()) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Box {
-                    Image(
-                        painter = painterResource(id = beasiswa.imageRes),
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(beasiswa.imageUrl)
+                            .setHeader("User-Agent", "Mozilla/5.0")
+                            .crossfade(true)
+                            .build(),
                         contentDescription = beasiswa.nama,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
+                        placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
+                        error = painterResource(id = android.R.drawable.ic_dialog_alert),
+                        onError = { Log.e("Coil_Error", "Detail: Gagal muat [${beasiswa.nama}]: ${it.result.throwable.message} URL: ${beasiswa.imageUrl}") },
+                        modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                         contentScale = ContentScale.Crop
                     )
                     IconButton(
                         onClick = { isFavorite = !isFavorite },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
                     ) {
                         Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                             contentDescription = "Favorite Icon",
                             tint = if (isFavorite) Color.Red else Color.White
                         )
                     }
                 }
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = beasiswa.nama,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = beasiswa.nama, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = beasiswa.deskripsi,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text(text = beasiswa.deskripsi, style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Batas Pendaftaran: ${beasiswa.deadline}",
@@ -198,25 +227,17 @@ fun DetailBeasiswaScreen(beasiswa: Beasiswa) {
                     Button(
                         onClick = {
                             coroutineScope.launch {
-                                isLoading = true
+                                isRegistering = true
                                 delay(2000)
-                                snackbarHostState.showSnackbar(
-                                    "Pendaftaran ${beasiswa.nama} berhasil diproses!"
-                                )
-                                isLoading = false
+                                snackbarHostState.showSnackbar("Berhasil mendaftar ke ${beasiswa.nama}!")
+                                isRegistering = false
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
+                        enabled = !isRegistering
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Memproses...")
+                        if (isRegistering) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                         } else {
                             Text("Daftar Sekarang")
                         }
@@ -224,17 +245,6 @@ fun DetailBeasiswaScreen(beasiswa: Beasiswa) {
                 }
             }
         }
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun DaftarBeasiswaPreview() {
-    PrakTAM_2407051025Theme {
-        DaftarBeasiswaScreen()
+        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }

@@ -1,10 +1,14 @@
 package com.example.praktam_2407051025.model
 
-import androidx.annotation.DrawableRes
+import com.google.gson.annotations.SerializedName
 
 data class Beasiswa(
-    val nama: String,
-    val deskripsi: String,
-    val deadline: String,
-    @DrawableRes val imageRes: Int
+    @SerializedName("nama")
+    val nama: String = "",
+    @SerializedName("deskripsi")
+    val deskripsi: String = "",
+    @SerializedName("deadline")
+    val deadline: String = "",
+    @SerializedName(value = "image_url", alternate = ["imageUrl", "gambar"])
+    val imageUrl: Any = ""
 )
